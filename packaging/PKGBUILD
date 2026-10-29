@@ -1,12 +1,13 @@
 # Maintainer: Sergio Peral <sergioperalgarijo99@gmail.com>
 pkgname=interpres
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc='Local translation popup on double Ctrl+C (Hyprland/Omarchy)'
 arch=('x86_64')
-url='https://github.com/Sloppy1999/interpres'
+url='https://github.com/TowhidMolla-Dev/interpres'
 license=('MIT')
 depends=('python' 'qt6-base' 'wl-clipboard' 'socat' 'jq' 'hyprland')
+optdepends=('espeak-ng: pronounce words from word cards')
 makedepends=('git' 'uv')
 options=('!strip')
 source=("git+$url.git#tag=v$pkgver")

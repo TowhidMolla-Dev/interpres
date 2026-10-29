@@ -15,6 +15,10 @@ from .translator import Translation, TranslationError
 
 INDEX_URL = "https://raw.githubusercontent.com/argosopentech/argospm-index/main/index.json"
 TARGET_ALIASES = {"EN-US": "en", "EN-GB": "en", "PT-BR": "pt", "PT-PT": "pt"}
+# py3langid is unreliable on very short text ("Another test sentence." is
+# Nigerian Pidgin by a hair). When the winner has no installed model but
+# English is within this margin, the selection is almost certainly English.
+ENGLISH_FALLBACK_MARGIN = 3.0
 
 
 class LocalTranslator:
@@ -78,6 +82,11 @@ class LocalTranslator:
                 raise TranslationError("Could not detect the source language.")
             if source == target:
                 return Translation(text, source.upper(), target_language.upper())
+            installed = self._installed_pairs()
+            if not self._route_installed(source, target, installed):
+                fallback = self._fallback_english(text, source, target, installed)
+                if fallback is not None:
+                    source = fallback
             route = self._route(source, target, report)
             if self._manage_sbd:
                 self._ensure_sentence_models(route, report)
@@ -96,6 +105,29 @@ class LocalTranslator:
                     message = "Local translation failed. Try a shorter selection."
                 raise TranslationError(message) from error
 
+    def warm(self, target_language: str) -> None:
+        """Load the English → target model without detecting or downloading.
+
+        Detection must not run here: short warm-up phrases are misclassified
+        often enough ("Hello there" is Sotho to py3langid), which used to turn
+        a warm-up into an index fetch and a bogus model install.
+        """
+        try:
+            self._load()
+        except TranslationError:
+            return
+        target = self._target_code(target_language)
+        if target == "en":
+            return
+        try:
+            installed = self._installed_pairs()
+            if ("en", target) not in installed:
+                return
+            self._translate.translate("Hello", "en", target)
+        except Exception:
+            # Warming is best effort; the real request reports its own error.
+            pass
+
     def _installed_pairs(self) -> set[tuple[str, str]]:
         try:
             return {
@@ -105,6 +137,41 @@ class LocalTranslator:
             }
         except Exception as error:
             raise TranslationError("Could not read installed local models.") from error
+
+    @staticmethod
+    def _route_installed(
+        source: str, target: str, installed: set[tuple[str, str]]
+    ) -> bool:
+        if (source, target) in installed:
+            return True
+        return (
+            source != "en"
+            and target != "en"
+            and (source, "en") in installed
+            and ("en", target) in installed
+        )
+
+    def _fallback_english(
+        self,
+        text: str,
+        source: str,
+        target: str,
+        installed: set[tuple[str, str]],
+    ) -> str | None:
+        if source == "en" or ("en", target) not in installed:
+            return None
+        rank = getattr(self._detector, "rank", None)
+        if rank is None:
+            return None
+        try:
+            scores = dict(rank(text))
+        except Exception:
+            return None
+        if "en" not in scores or source not in scores:
+            return None
+        if scores[source] - scores["en"] > ENGLISH_FALLBACK_MARGIN:
+            return None
+        return "en"
 
     def _route(
         self, source: str, target: str, report: Callable[[str], None]

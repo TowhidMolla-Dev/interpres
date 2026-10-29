@@ -34,12 +34,14 @@ class GlobalListener:
         on_click: Callable[[], None],
         on_escape: Callable[[], None],
         on_error: Callable[[str], None],
+        on_prepare: Callable[[], None] | None = None,
     ) -> None:
         self.detector = DoubleCopyDetector(interval_ms)
         self.on_trigger = on_trigger
         self.on_click = on_click
         self.on_escape = on_escape
         self.on_error = on_error
+        self.on_prepare = on_prepare or (lambda: None)
         self._ctrl_down: set[object] = set()
         self._copy_down = False
         self._keyboard = None
@@ -64,9 +66,12 @@ class GlobalListener:
             self._ctrl_down.add(str(key))
         elif self.count_copy and self._is_copy(key) and not self._copy_down:
             self._copy_down = True
-            if self._ctrl_down and self.detector.press(time.monotonic()):
-                self.on_trigger()
-            elif not self._ctrl_down:
+            if self._ctrl_down:
+                if self.detector.press(time.monotonic()):
+                    self.on_trigger()
+                else:
+                    self.on_prepare()
+            else:
                 self.detector.reset()
 
     def key_release(self, key: object) -> None:

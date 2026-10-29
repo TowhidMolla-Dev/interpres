@@ -141,6 +141,49 @@ def test_local_translator_can_use_installed_english_pivot() -> None:
     assert engine.translate.call_count == 2
 
 
+def test_local_translator_falls_back_to_english_on_a_near_tie() -> None:
+    package = Mock()
+    package.get_installed_packages.return_value = [
+        SimpleNamespace(from_code="en", to_code="bn")
+    ]
+    engine = Mock()
+    engine.translate.return_value = "আরেকটি পরীক্ষার বাক্য।"
+    detector = Mock()
+    detector.classify.return_value = ("pcm", -72.9)
+    detector.rank.return_value = [("pcm", -72.9), ("en", -74.2)]
+    local = LocalTranslator(False, package_api=package, translate_api=engine, detector=detector)
+    result = local.translate("Another test sentence.", "BN")
+    assert result.source_language == "EN"
+    engine.translate.assert_called_once_with("Another test sentence.", "en", "bn")
+
+
+def test_local_translator_keeps_a_confident_foreign_detection() -> None:
+    package = Mock()
+    package.get_installed_packages.return_value = [
+        SimpleNamespace(from_code="en", to_code="bn")
+    ]
+    detector = Mock()
+    detector.classify.return_value = ("sv", -10.0)
+    detector.rank.return_value = [("sv", -10.0), ("en", -40.0)]
+    local = LocalTranslator(False, package_api=package, translate_api=Mock(), detector=detector)
+    with pytest.raises(TranslationError, match="not installed"):
+        local.translate("Hej på dig", "BN")
+
+
+def test_warm_loads_english_route_without_detection_or_download() -> None:
+    package = Mock()
+    package.get_installed_packages.return_value = [
+        SimpleNamespace(from_code="en", to_code="bn")
+    ]
+    engine = Mock()
+    detector = Mock()
+    detector.classify.side_effect = AssertionError("warm must not detect")
+    local = LocalTranslator(False, package_api=package, translate_api=engine, detector=detector)
+    local.warm("BN")
+    engine.translate.assert_called_once_with("Hello", "en", "bn")
+    detector.classify.assert_not_called()
+
+
 def test_key_press_ignored_when_external_trigger_counts(monkeypatch: pytest.MonkeyPatch) -> None:
     fired = []
     listener = GlobalListener(500, lambda: fired.append(1), Mock(), Mock(), Mock())

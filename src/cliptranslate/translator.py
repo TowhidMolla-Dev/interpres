@@ -72,11 +72,19 @@ class DeepLTranslator:
 
 
 class CachedTranslator:
-    def __init__(self, backend: Translator, capacity: int = 64) -> None:
+    def __init__(self, backend: Translator, capacity: int = 64, store: object = None) -> None:
         self.backend = backend
         self.capacity = capacity
+        self.store = store
         self._items: OrderedDict[tuple[str, str], Translation] = OrderedDict()
         self._lock = threading.Lock()
+
+    def _remember(self, key: tuple[str, str], result: Translation) -> None:
+        with self._lock:
+            self._items[key] = result
+            self._items.move_to_end(key)
+            if len(self._items) > self.capacity:
+                self._items.popitem(last=False)
 
     def translate(
         self, text: str, target_language: str, progress: Callable[[str], None] | None = None
@@ -86,13 +94,33 @@ class CachedTranslator:
             if key in self._items:
                 self._items.move_to_end(key)
                 return self._items[key]
+        if self.store is not None:
+            stored = self.store.get(text, key[1])
+            if stored is not None:
+                self._remember(key, stored)
+                return stored
         if progress is None:
             result = self.backend.translate(text, target_language)
         else:
             result = self.backend.translate(text, target_language, progress)
-        with self._lock:
-            self._items[key] = result
-            self._items.move_to_end(key)
-            if len(self._items) > self.capacity:
-                self._items.popitem(last=False)
+        self._remember(key, result)
+        if self.store is not None:
+            self.store.put(text, key[1], result)
         return result
+
+    def warm(self, target_language: str) -> None:
+        warm = getattr(self.backend, "warm", None)
+        if warm is not None:
+            warm(target_language)
+
+    def pid(self) -> int | None:
+        pid = getattr(self.backend, "pid", None)
+        return pid() if pid is not None else None
+
+    def close(self) -> None:
+        close = getattr(self.backend, "close", None)
+        if close is not None:
+            close()
+        close = getattr(self.store, "close", None)
+        if close is not None:
+            close()
