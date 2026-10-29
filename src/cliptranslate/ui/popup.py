@@ -199,6 +199,9 @@ class TranslationPopup(QWidget):
         self.original_toggle.blockSignals(True)
         self.original_toggle.setChecked(False)
         self.original_toggle.blockSignals(False)
+        # Signals are blocked above, so reset the arrow explicitly; otherwise a
+        # previously expanded popup keeps the "down" arrow pointing at nothing.
+        self.original_toggle.setArrowType(Qt.ArrowType.RightArrow)
         self.original_box.hide()
         self.target_box.setVisible(not word)
         self.arrow_label.setVisible(not word)

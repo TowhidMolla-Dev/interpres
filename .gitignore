@@ -5,3 +5,10 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# Arch packaging build output (makepkg)
+packaging/src/
+packaging/pkg/
+packaging/*.pkg.tar.zst
+packaging/*.log
+packaging/interpres/
