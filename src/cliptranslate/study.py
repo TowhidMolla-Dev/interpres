@@ -389,12 +389,17 @@ def render_word_html(card: WordCard) -> str:
         badges.append(f'<span class="badge">AWL {card.awl}</span>')
     if badges:
         parts.append("<p>" + " ".join(badges) + "</p>")
-    if card.pending:
-        parts.append(
-            '<p class="muted">Building Bengali and IELTS notes in the background…</p>'
-        )
-
     pos_blocks = _pairs(data.get("pos"), "part")
+    if card.pending:
+        if pos_blocks:
+            parts.append(
+                '<p class="muted">Building Bengali and IELTS notes in the background…</p>'
+            )
+        else:
+            # No ch card yet: the LLM is generating the whole study card, so do
+            # not tell the user to run ch -w — it is already being built.
+            parts.append('<p class="muted">Building your study card…</p>')
+
     if pos_blocks:
         for block in pos_blocks[:3]:
             if block.get("part"):
@@ -409,7 +414,7 @@ def render_word_html(card: WordCard) -> str:
                     line += f'<br><span class="example">e.g. {_text(sense["example"])}</span>'
                 parts.append(f"<li>{line}</li>")
             parts.append("</ol>")
-    else:
+    elif not card.pending:
         parts.append(
             f'<p class="muted">No card in your ch cache yet. Run '
             f'<b>ch -w {_text(card.word)}</b> once to build one.</p>'

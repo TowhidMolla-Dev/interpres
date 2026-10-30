@@ -253,15 +253,44 @@ def test_full_study_card_renders_every_template_section() -> None:
 
 
 def test_pending_card_says_notes_are_being_built() -> None:
-    card = study.WordCard(
+    # ch card exists: enrichment is adding sections to it.
+    with_base = study.WordCard(
         word="aim",
-        data={"word": "aim", "pos": []},
+        data={"word": "aim", "pos": [{"part": "noun", "senses": [{"definition": "a goal"}]}]},
         ipa="/eɪm/",
         awl=None,
         due=None,
         pending=True,
     )
-    assert "Building Bengali and IELTS notes" in study.render_word_html(card)
+    html = study.render_word_html(with_base)
+    assert "Building Bengali and IELTS notes" in html
+    assert "ch -w" not in html
+
+
+def test_pending_card_without_ch_card_does_not_ask_user_to_run_ch() -> None:
+    # No ch card yet and the LLM is building one: the popup must say so and
+    # must NOT tell the user to run `ch -w` first, which is the whole point of
+    # building the card in-app.
+    card = study.WordCard(
+        word="obstreperous",
+        data=None,
+        ipa="/ˌɒbstrəˈpɪərəs/",
+        awl=None,
+        due=None,
+        pending=True,
+    )
+    html = study.render_word_html(card)
+    assert "Building your study card" in html
+    assert "ch -w" not in html
+
+
+def test_missing_ch_card_falls_back_to_ch_instruction() -> None:
+    # Enrichment is off or failed and ch has no card: ch -w is the only path.
+    card = study.WordCard(
+        word="obstreperous", data=None, ipa="", awl=None, due=None, pending=False
+    )
+    html = study.render_word_html(card)
+    assert "ch -w" in html
 
 
 def test_build_word_card_uses_cached_enrichment(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
